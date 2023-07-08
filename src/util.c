@@ -12,14 +12,14 @@
 
 
 int
-WriteFile(
+UtilWriteFile(
 	const char* Path,
 	uint64_t Length,
 	uint8_t* Buffer
 	)
 {
 #ifdef _WIN32
-	HANDLE File = CreateFile(Path, GENERIC_WRITE, 0, NULL, 
+	HANDLE File = CreateFile(Path, GENERIC_WRITE, 0, NULL,
 		CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if(File == INVALID_HANDLE_VALUE)
 	{
@@ -50,7 +50,7 @@ WriteFile(
 
 
 int
-ReadFile(
+UtilReadFile(
 	const char* Path,
 	uint64_t* Length,
 	uint8_t** Buffer

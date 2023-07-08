@@ -1004,7 +1004,7 @@ VulkanCreateShader(
 	uint64_t Size;
 	uint8_t* Buffer;
 
-	int Error = ReadFile(Path, &Size, &Buffer);
+	int Error = UtilReadFile(Path, &Size, &Buffer);
 	AssertEQ(Error, 0);
 
 	const uint32_t* Code = (const uint32_t*) Buffer;

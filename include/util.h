@@ -25,14 +25,14 @@ extern "C"
 })
 
 extern int
-WriteFile(
+UtilWriteFile(
 	const char* Path,
 	uint64_t Length,
 	uint8_t* Buffer
 	);
 
 extern int
-ReadFile(
+UtilReadFile(
 	const char* Path,
 	uint64_t* Length,
 	uint8_t** Buffer

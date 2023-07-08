@@ -2,17 +2,25 @@
 .PHONY: all
 all: build
 
+ifdef OS
+CFLAGS := -Wall -lm -lglfw3 -lvulkan-1
+OUTPUT := bin/exe.exe
+endif
+ifndef OS
 CFLAGS := -Wall -lm -lglfw -lvulkan
-
-ifneq ($(RELEASE),1)
-CFLAGS := -O0 -g3 -ggdb $(CFLAGS)
+OUTPUT := bin/exe
 endif
 
 ifeq ($(RELEASE),1)
 CFLAGS := -O3 -DNDEBUG $(CFLAGS)
 endif
+ifneq ($(RELEASE),1)
+CFLAGS := -O0 -g3 -ggdb $(CFLAGS)
+endif
 
 COMP := $(CC) src/* -o bin/exe
+
+
 
 .PHONY: shaders
 shaders:
@@ -21,12 +29,12 @@ shaders:
 
 .PHONY: build
 build: shaders
-	$(COMP) $(CFLAGS) && bin/exe
+	$(COMP) $(CFLAGS) && $(OUTPUT)
 
 .PHONY: valgrind
 valgrind: shaders
-	$(COMP) $(CFLAGS) && valgrind bin/exe
+	$(COMP) $(CFLAGS) && valgrind $(OUTPUT)
 
 .PHONY: sanitize
 sanitizer: shaders
-	$(CC) -fsanitize=address,undefined $(CFLAGS) && bin/exe
+	$(CC) -fsanitize=address,undefined $(CFLAGS) && $(OUTPUT)
