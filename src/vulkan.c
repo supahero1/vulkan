@@ -99,33 +99,33 @@ VkVertexInput;
 
 static const VkVertexInput vkVertexInput[] =
 {
-	{{50.5f, 50.5f, -50.5f}, {1.0f, 1.0f}},
-	{{50.5f, 50.5f, -50.5f}, {1.0f, 1.0f}},
-	{{-50.5f, 50.5f, -50.5f}, {0.9f, 1.0f}},
-    {{50.5f, -50.5f, -50.5f}, {1.0f, 0.9f}},
-	{{-50.5f, -50.5f, -50.5f}, {0.9f, 0.9f}},
-	{{-50.5f, -50.5f, -50.5f}, {0.9f, 0.9f}},
+	{{50.5f, 50.5f, -50.5f}, {0.875f, 0.875f}},
+	{{50.5f, 50.5f, -50.5f}, {0.875f, 0.875f}},
+	{{-50.5f, 50.5f, -50.5f}, {0.8f, 0.875f}},
+    {{50.5f, -50.5f, -50.5f}, {0.875f, 0.8f}},
+	{{-50.5f, -50.5f, -50.5f}, {0.8f, 0.8f}},
+	{{-50.5f, -50.5f, -50.5f}, {0.8f, 0.8f}},
 
-	{{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}},
-	{{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}},
-	{{-0.5f, 0.5f, -0.5f}, {0.0f, 1.0f}},
-    {{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}},
-	{{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}},
-	{{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}},
+	{{0.5f, 0.5f, -0.5f}, {0.875f, 0.875f}},
+	{{0.5f, 0.5f, -0.5f}, {0.875f, 0.875f}},
+	{{-0.5f, 0.5f, -0.5f}, {0.125f, 0.875f}},
+    {{0.5f, -0.5f, -0.5f}, {0.875f, 0.125f}},
+	{{-0.5f, -0.5f, -0.5f}, {0.125f, 0.125f}},
+	{{-0.5f, -0.5f, -0.5f}, {0.125f, 0.125f}},
 
-	{{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}},
-	{{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}},
-	{{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}},
-    {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}},
-	{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
-	{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
+	{{0.5f, 0.5f, 0.0f}, {0.875f, 0.875f}},
+	{{0.5f, 0.5f, 0.0f}, {0.875f, 0.875f}},
+	{{-0.5f, 0.5f, 0.0f}, {0.125f, 0.875f}},
+    {{0.5f, -0.5f, 0.0f}, {0.875f, 0.125f}},
+	{{-0.5f, -0.5f, 0.0f}, {0.125f, 0.125f}},
+	{{-0.5f, -0.5f, 0.0f}, {0.125f, 0.125f}},
 
-	{{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f}},
-	{{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f}},
-	{{-0.5f, 0.5f, 0.5f}, {0.0f, 1.0f}},
-    {{0.5f, -0.5f, 0.5f}, {1.0f, 0.0f}},
-	{{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}},
-	{{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}},
+	{{0.5f, 0.5f, 0.5f}, {0.875f, 0.875f}},
+	{{0.5f, 0.5f, 0.5f}, {0.875f, 0.875f}},
+	{{-0.5f, 0.5f, 0.5f}, {0.125f, 0.875f}},
+    {{0.5f, -0.5f, 0.5f}, {0.875f, 0.125f}},
+	{{-0.5f, -0.5f, 0.5f}, {0.125f, 0.125f}},
+	{{-0.5f, -0.5f, 0.5f}, {0.125f, 0.125f}},
 };
 
 static VkBuffer vkVertexBuffer;
@@ -604,7 +604,15 @@ VulkanGetDeviceProperties(
 	VkSampleCountFlags Counts =
 		Properties.limits.framebufferColorSampleCounts & Properties.limits.framebufferDepthSampleCounts;
 
-	if(Counts & VK_SAMPLE_COUNT_4_BIT)
+	if(Counts & VK_SAMPLE_COUNT_16_BIT)
+	{
+		DeviceScore->Samples = VK_SAMPLE_COUNT_16_BIT;
+	}
+	else if(Counts & VK_SAMPLE_COUNT_8_BIT)
+	{
+		DeviceScore->Samples = VK_SAMPLE_COUNT_8_BIT;
+	}
+	else if(Counts & VK_SAMPLE_COUNT_4_BIT)
 	{
 		DeviceScore->Samples = VK_SAMPLE_COUNT_4_BIT;
 	}
@@ -971,9 +979,9 @@ VulkanInitSampler(
 	CreateInfo.magFilter = VK_FILTER_NEAREST;
 	CreateInfo.minFilter = VK_FILTER_NEAREST;
 	CreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-	CreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-	CreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-	CreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+	CreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	CreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	CreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 	CreateInfo.mipLodBias = 0.0f;
 	CreateInfo.anisotropyEnable = VK_TRUE;
 	CreateInfo.maxAnisotropy = vkLimits.maxSamplerAnisotropy;
@@ -2147,6 +2155,7 @@ VulkanRecreateSwapchain(
 	puts("recreating swapchain");
 
 	vkExtent = VulkanGetExtent();
+	printf("w %u h %u\n", vkExtent.width, vkExtent.height);
 	VulkanGetConsts();
 
 	vkDeviceWaitIdle(vkDevice);
@@ -2168,7 +2177,7 @@ VulkanUpdateUniforms(
 	Rotation += 0.0001;
 
 	vec3 RotationAxis = { sinf(Rotation), sinf(Rotation) * cosf(Rotation), cosf(Rotation) };
-	vec3 Eye = { 0.0f, 3.0f, 3.0f };
+	vec3 Eye = { 0.0f, 1.0f, 1.0f };
 	vec3 Center = { 0.0f, 0.0f, 0.0f };
 	vec3 Up = { 0.0f, 0.0f, 1.0f };
 
@@ -2345,3 +2354,8 @@ VulkanFree(
 	VulkanDestroyInstance();
 	VulkanDestroyGLFW();
 }
+
+// 1. secondary command buffer for prerecorded draw commands
+// 2. swapchain recreation occurs on windows, need to add depth buffer and multisampling recreation
+// 3. only draw textures, no custom positions
+// 4. push constants and merge the 3 matrices into 1
