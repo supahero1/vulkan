@@ -13,6 +13,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
 
+#include <time.h>
 #include <string.h>
 
 
@@ -50,6 +51,7 @@ static VkQueue vkQueue;
 static VkDevice vkDevice;
 static VkExtent2D vkExtent;
 static VkSampleCountFlagBits vkSamples;
+static VkBool32 VkMultisamplingEnabled;
 static VkPhysicalDeviceLimits vkLimits;
 static uint32_t vkMinImageCount;
 static VkSurfaceTransformFlagBitsKHR vkTransform;
@@ -97,17 +99,33 @@ VkVertexInput;
 
 static const VkVertexInput vkVertexInput[] =
 {
-	{{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}},
-	{{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}},
-    {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}},
-	{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
-	{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
+	{{50.5f, 50.5f, -50.5f}, {1.0f, 1.0f}},
+	{{50.5f, 50.5f, -50.5f}, {1.0f, 1.0f}},
+	{{-50.5f, 50.5f, -50.5f}, {0.9f, 1.0f}},
+    {{50.5f, -50.5f, -50.5f}, {1.0f, 0.9f}},
+	{{-50.5f, -50.5f, -50.5f}, {0.9f, 0.9f}},
+	{{-50.5f, -50.5f, -50.5f}, {0.9f, 0.9f}},
 
 	{{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}},
 	{{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}},
 	{{-0.5f, 0.5f, -0.5f}, {0.0f, 1.0f}},
     {{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}},
 	{{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}},
+	{{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}},
+
+	{{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}},
+	{{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}},
+	{{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}},
+    {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}},
+	{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
+	{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
+
+	{{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f}},
+	{{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f}},
+	{{-0.5f, 0.5f, 0.5f}, {0.0f, 1.0f}},
+    {{0.5f, -0.5f, 0.5f}, {1.0f, 0.0f}},
+	{{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}},
+	{{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}},
 };
 
 static VkBuffer vkVertexBuffer;
@@ -273,7 +291,7 @@ VulkanInitInstance(
 	AppInfo.applicationVersion = 0;
 	AppInfo.pEngineName = NULL;
 	AppInfo.engineVersion = 0;
-	AppInfo.apiVersion = VK_API_VERSION_1_3;
+	AppInfo.apiVersion = VK_API_VERSION_1_0;
 
 	VkInstanceCreateInfo CreateInfo = {0};
 	CreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -376,6 +394,29 @@ typedef struct VkDeviceScore
 	VkPhysicalDeviceLimits Limits;
 }
 VkDeviceScore;
+
+
+static int
+VulkanGetDeviceFeatures(
+	VkPhysicalDevice Device,
+	VkDeviceScore* DeviceScore
+	)
+{
+	VkPhysicalDeviceFeatures Features;
+	vkGetPhysicalDeviceFeatures(Device, &Features);
+
+	if(!Features.samplerAnisotropy)
+	{
+		return 0;
+	}
+
+	if(!Features.sampleRateShading)
+	{
+		return 0;
+	}
+
+	return 1;
+}
 
 
 static int
@@ -591,15 +632,7 @@ VulkanGetDeviceScore(
 {
 	VkDeviceScore DeviceScore = {0};
 
-	VkPhysicalDeviceFeatures Features;
-	vkGetPhysicalDeviceFeatures(Device, &Features);
-
-	if(!Features.logicOp)
-	{
-		goto goto_err;
-	}
-
-	if(!Features.samplerAnisotropy)
+	if(!VulkanGetDeviceFeatures(Device, &DeviceScore))
 	{
 		goto goto_err;
 	}
@@ -669,6 +702,7 @@ VulkanInitDevice(
 	vkQueueID = BestDeviceScore.QueueID;
 	vkExtent = BestDeviceScore.Extent;
 	vkSamples = BestDeviceScore.Samples;
+	VkMultisamplingEnabled = vkSamples != VK_SAMPLE_COUNT_1_BIT;
 	vkLimits = BestDeviceScore.Limits;
 
 
@@ -683,8 +717,8 @@ VulkanInitDevice(
 	Queue.pQueuePriorities = &Priority;
 
 	VkPhysicalDeviceFeatures DeviceFeatures = {0};
-	DeviceFeatures.logicOp = VK_TRUE;
 	DeviceFeatures.samplerAnisotropy = VK_TRUE;
+	DeviceFeatures.sampleRateShading = VK_TRUE;
 
 	VkDeviceCreateInfo CreateInfo = {0};
 	CreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -721,56 +755,6 @@ VulkanDestroyDevice(
 
 
 static void
-VulkanCreateArbitraryImageView(
-	VkImage Image,
-	VkImageView* ImageView,
-	VkFormat Format,
-	VkImageAspectFlags Aspect
-	)
-{
-	VkImageViewCreateInfo CreateInfo = {0};
-	CreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	CreateInfo.pNext = NULL;
-	CreateInfo.flags = 0;
-	CreateInfo.image = Image;
-	CreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	CreateInfo.format = Format;
-	CreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-	CreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-	CreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-	CreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-	CreateInfo.subresourceRange.aspectMask = Aspect;
-	CreateInfo.subresourceRange.baseMipLevel = 0;
-	CreateInfo.subresourceRange.levelCount = 1;
-	CreateInfo.subresourceRange.baseArrayLayer = 0;
-	CreateInfo.subresourceRange.layerCount = 1;
-
-	VkResult Result = vkCreateImageView(vkDevice, &CreateInfo, NULL, ImageView);
-	AssertEQ(Result, VK_SUCCESS);
-}
-
-
-static void
-VulkanCreateImageView(
-	VkImage Image,
-	VkImageView* ImageView
-	)
-{
-	VulkanCreateArbitraryImageView(Image, ImageView, VK_FORMAT_B8G8R8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-}
-
-
-static void
-VulkanCreateDepthImageView(
-	VkImage Image,
-	VkImageView* ImageView
-	)
-{
-	VulkanCreateArbitraryImageView(Image, ImageView, VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT);
-}
-
-
-static void
 VulkanInitSwapchain(
 	void
 	)
@@ -791,7 +775,7 @@ VulkanInitSwapchain(
 	CreateInfo.pQueueFamilyIndices = NULL;
 	CreateInfo.preTransform = vkTransform;
 	CreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-	CreateInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+	CreateInfo.presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 	CreateInfo.clipped = VK_TRUE;
 	CreateInfo.oldSwapchain = VK_NULL_HANDLE;
 
@@ -816,7 +800,25 @@ VulkanInitSwapchain(
 
 	while(1)
 	{
-		VulkanCreateImageView(*Image, ImageView);
+		VkImageViewCreateInfo CreateInfo = {0};
+		CreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		CreateInfo.pNext = NULL;
+		CreateInfo.flags = 0;
+		CreateInfo.image = *Image;
+		CreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		CreateInfo.format = VK_FORMAT_B8G8R8A8_SRGB;
+		CreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+		CreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+		CreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+		CreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+		CreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		CreateInfo.subresourceRange.baseMipLevel = 0;
+		CreateInfo.subresourceRange.levelCount = 1;
+		CreateInfo.subresourceRange.baseArrayLayer = 0;
+		CreateInfo.subresourceRange.layerCount = 1;
+
+		VkResult Result = vkCreateImageView(vkDevice, &CreateInfo, NULL, ImageView);
+		AssertEQ(Result, VK_SUCCESS);
 
 		if(++Image == ImageEnd)
 		{
@@ -966,15 +968,15 @@ VulkanInitSampler(
 	CreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 	CreateInfo.pNext = NULL;
 	CreateInfo.flags = 0;
-	CreateInfo.magFilter = VK_FILTER_LINEAR;
-	CreateInfo.minFilter = VK_FILTER_LINEAR;
+	CreateInfo.magFilter = VK_FILTER_NEAREST;
+	CreateInfo.minFilter = VK_FILTER_NEAREST;
 	CreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 	CreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
 	CreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
 	CreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
 	CreateInfo.mipLodBias = 0.0f;
 	CreateInfo.anisotropyEnable = VK_TRUE;
-	CreateInfo.maxAnisotropy = vkSamples; // vkLimits.maxSamplerAnisotropy;
+	CreateInfo.maxAnisotropy = vkLimits.maxSamplerAnisotropy;
 	CreateInfo.compareEnable = VK_FALSE;
 	CreateInfo.compareOp = VK_COMPARE_OP_ALWAYS;
 	CreateInfo.minLod = 0.0f;
@@ -1250,10 +1252,11 @@ VulkanCopyToImage(
 
 
 static void
-VulkanCreateImage(
+VulkanCreateImageGeneric(
 	uint32_t Width,
 	uint32_t Height,
 	VkFormat Format,
+	VkImageAspectFlags Aspect,
 	VkSampleCountFlagBits Samples,
 	VkImageUsageFlags Usage,
 	VkMemoryPropertyFlags Properties,
@@ -1296,6 +1299,61 @@ VulkanCreateImage(
 
 	Result = vkBindImageMemory(vkDevice, Image->Image, Image->Memory, 0);
 	AssertEQ(Result, VK_SUCCESS);
+
+	VkImageViewCreateInfo ViewInfo = {0};
+	ViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	ViewInfo.pNext = NULL;
+	ViewInfo.flags = 0;
+	ViewInfo.image = Image->Image;
+	ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	ViewInfo.format = Format;
+	ViewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+	ViewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+	ViewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+	ViewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+	ViewInfo.subresourceRange.aspectMask = Aspect;
+	ViewInfo.subresourceRange.baseMipLevel = 0;
+	ViewInfo.subresourceRange.levelCount = 1;
+	ViewInfo.subresourceRange.baseArrayLayer = 0;
+	ViewInfo.subresourceRange.layerCount = 1;
+
+	Result = vkCreateImageView(vkDevice, &ViewInfo, NULL, &Image->View);
+	AssertEQ(Result, VK_SUCCESS);
+}
+
+
+static void
+VulkanCreateTextureImage(
+	uint32_t Width,
+	uint32_t Height,
+	Image* Image
+	)
+{
+	VulkanCreateImageGeneric(Width, Height, VK_FORMAT_B8G8R8A8_SRGB,
+		VK_IMAGE_ASPECT_COLOR_BIT, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+		VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Image);
+}
+
+
+static void
+VulkanCreateDepthImage(
+	Image* Image
+	)
+{
+	VulkanCreateImageGeneric(vkExtent.width, vkExtent.height, VK_FORMAT_D32_SFLOAT,
+		VK_IMAGE_ASPECT_DEPTH_BIT, vkSamples, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Image);
+}
+
+
+static void
+VulkanCreateMultisampledImage(
+	Image* Image
+	)
+{
+	VulkanCreateImageGeneric(vkExtent.width, vkExtent.height, VK_FORMAT_B8G8R8A8_SRGB,
+		VK_IMAGE_ASPECT_COLOR_BIT, vkSamples, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
+		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Image);
 }
 
 
@@ -1313,7 +1371,6 @@ VulkanDestroyImage(
 static void
 VulkanTransitionImageLayout(
 	Image* Image,
-	VkFormat Format,
 	VkImageLayout From,
 	VkImageLayout To
 	)
@@ -1369,7 +1426,7 @@ VulkanTransitionImageLayout(
 
 static void
 VulkanCreateTexture(
-	const char* Path, // "textures/texture2.jpg"
+	const char* Path,
 	Image* Image
 	)
 {
@@ -1380,20 +1437,15 @@ VulkanCreateTexture(
 	stbi_uc* Pixels = stbi_load(Path, &TextureWidth, &TextureHeight, &TextureChannels, STBI_rgb_alpha);
 	AssertNEQ(Pixels, NULL);
 
-	VulkanCreateImage(TextureWidth, TextureHeight, VK_FORMAT_B8G8R8A8_SRGB, VK_SAMPLE_COUNT_1_BIT,
-		VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Image);
+	VulkanCreateTextureImage(TextureWidth, TextureHeight, Image);
 
-	VulkanTransitionImageLayout(Image, VK_FORMAT_B8G8R8A8_SRGB,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	VulkanTransitionImageLayout(Image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 	VulkanCopyToImage(Image, Pixels, TextureWidth, TextureHeight);
 
 	stbi_image_free(Pixels);
 
-	VulkanTransitionImageLayout(Image, VK_FORMAT_B8G8R8A8_SRGB,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-	VulkanCreateImageView(Image->Image, &Image->View);
+	VulkanTransitionImageLayout(Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
 
@@ -1411,9 +1463,7 @@ VulkanInitDepthBuffer(
 	void
 	)
 {
-	VulkanCreateImage(vkExtent.width, vkExtent.height, VK_FORMAT_D32_SFLOAT, vkSamples,
-		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkDepthBuffer);
-	VulkanCreateDepthImageView(vkDepthBuffer.Image, &vkDepthBuffer.View);
+	VulkanCreateDepthImage(&vkDepthBuffer);
 }
 
 
@@ -1431,10 +1481,12 @@ VulkanInitMultisampling(
 	void
 	)
 {
-	VulkanCreateImage(vkExtent.width, vkExtent.height, VK_FORMAT_B8G8R8A8_SRGB, vkSamples,
-		VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkMultisampling);
-	VulkanCreateImageView(vkMultisampling.Image, &vkMultisampling.View);
+	if(!VkMultisamplingEnabled)
+	{
+		return;
+	}
+
+	VulkanCreateMultisampledImage(&vkMultisampling);
 }
 
 
@@ -1443,6 +1495,11 @@ VulkanDestroyMultisampling(
 	void
 	)
 {
+	if(!VkMultisamplingEnabled)
+	{
+		return;
+	}
+
 	VulkanDestroyImage(&vkMultisampling);
 }
 
@@ -1464,6 +1521,12 @@ VulkanInitFramebuffers(
 	{
 		VkImageView Attachments[] =
 		{
+			*ImageView,
+			vkDepthBuffer.View
+		};
+
+		VkImageView MultisamplingAttachments[] =
+		{
 			vkMultisampling.View,
 			vkDepthBuffer.View,
 			*ImageView
@@ -1474,8 +1537,8 @@ VulkanInitFramebuffers(
 		CreateInfo.pNext = NULL;
 		CreateInfo.flags = 0;
 		CreateInfo.renderPass = vkRenderPass;
-		CreateInfo.attachmentCount = ARRAYLEN(Attachments);
-		CreateInfo.pAttachments = Attachments;
+		CreateInfo.attachmentCount = VkMultisamplingEnabled ? ARRAYLEN(MultisamplingAttachments) : ARRAYLEN(Attachments);
+		CreateInfo.pAttachments = VkMultisamplingEnabled ? MultisamplingAttachments : Attachments;
 		CreateInfo.width = vkExtent.width;
 		CreateInfo.height = vkExtent.height;
 		CreateInfo.layers = 1;
@@ -1536,7 +1599,7 @@ VulkanInitPipeline(
 {
 	VulkanGetConsts();
 
-	VulkanCreateTexture("textures/texture2.jpg", &vkTexture);
+	VulkanCreateTexture("textures/texture6.png", &vkTexture);
 
 	VkAttachmentReference ColorAttachmentRef = {0};
 	ColorAttachmentRef.attachment = 0;
@@ -1557,7 +1620,7 @@ VulkanInitPipeline(
 	Subpass.pInputAttachments = NULL;
 	Subpass.colorAttachmentCount = 1;
 	Subpass.pColorAttachments = &ColorAttachmentRef;
-	Subpass.pResolveAttachments = &MultisamplingRef;
+	Subpass.pResolveAttachments = VkMultisamplingEnabled ? &MultisamplingRef : NULL;
 	Subpass.pDepthStencilAttachment = &DepthAttachmentRef;
 	Subpass.preserveAttachmentCount = 0;
 	Subpass.pPreserveAttachments = NULL;
@@ -1581,7 +1644,8 @@ VulkanInitPipeline(
 	Attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	Attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	Attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	Attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	Attachments[0].finalLayout =
+		VkMultisamplingEnabled ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 	Attachments[1].flags = 0;
 	Attachments[1].format = VK_FORMAT_D32_SFLOAT;
@@ -1607,7 +1671,7 @@ VulkanInitPipeline(
 	RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 	RenderPassInfo.pNext = NULL;
 	RenderPassInfo.flags = 0;
-	RenderPassInfo.attachmentCount = ARRAYLEN(Attachments);
+	RenderPassInfo.attachmentCount = ARRAYLEN(Attachments) - !VkMultisamplingEnabled;
 	RenderPassInfo.pAttachments = Attachments;
 	RenderPassInfo.subpassCount = 1;
 	RenderPassInfo.pSubpasses = &Subpass;
@@ -1714,7 +1778,7 @@ VulkanInitPipeline(
 	Multisampling.pNext = NULL;
 	Multisampling.flags = 0;
 	Multisampling.rasterizationSamples = vkSamples;
-	Multisampling.sampleShadingEnable = VK_FALSE;
+	Multisampling.sampleShadingEnable = VK_TRUE;
 	Multisampling.minSampleShading = 1.0f;
 	Multisampling.pSampleMask = NULL;
 	Multisampling.alphaToCoverageEnable = VK_FALSE;
@@ -1735,7 +1799,7 @@ VulkanInitPipeline(
 	DepthStencil.maxDepthBounds = 0.0f;
 
 	VkPipelineColorBlendAttachmentState BlendingAttachment = {0};
-	BlendingAttachment.blendEnable = VK_FALSE; // VK_TRUE
+	BlendingAttachment.blendEnable = VK_TRUE;
 	BlendingAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
 	BlendingAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 	BlendingAttachment.colorBlendOp = VK_BLEND_OP_ADD;
@@ -1750,7 +1814,7 @@ VulkanInitPipeline(
 	Blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 	Blending.pNext = NULL;
 	Blending.flags = 0;
-	Blending.logicOpEnable = VK_FALSE; // VK_TRUE
+	Blending.logicOpEnable = VK_FALSE;
 	Blending.logicOp = VK_LOGIC_OP_COPY;
 	Blending.attachmentCount = 1;
 	Blending.pAttachments = &BlendingAttachment;
@@ -2080,6 +2144,8 @@ VulkanRecreateSwapchain(
 	void
 	)
 {
+	puts("recreating swapchain");
+
 	vkExtent = VulkanGetExtent();
 	VulkanGetConsts();
 
@@ -2099,10 +2165,10 @@ VulkanUpdateUniforms(
 	)
 {
 	static float Rotation = 0;
-	Rotation += 0.01;
+	Rotation += 0.0001;
 
 	vec3 RotationAxis = { sinf(Rotation), sinf(Rotation) * cosf(Rotation), cosf(Rotation) };
-	vec3 Eye = { 0.0f, 2.0f, 2.0f };
+	vec3 Eye = { 0.0f, 3.0f, 3.0f };
 	vec3 Center = { 0.0f, 0.0f, 0.0f };
 	vec3 Up = { 0.0f, 0.0f, 1.0f };
 
@@ -2115,6 +2181,7 @@ VulkanUpdateUniforms(
 	glm_rotate(Input.Model, Rotation, RotationAxis);
 	glm_lookat(Eye, Center, Up, Input.View);
 	glm_perspective(glm_rad(45 + sinf(Rotation) * 30), (float) vkExtent.width / vkExtent.height, 0.1f, 100.0f, Input.Projection);
+	//glm_ortho_default((float) vkExtent.width / vkExtent.height, Input.Projection);
 	Input.Projection[1][1] *= -1;
 
 	memcpy(vkFrame->UniformData, &Input, sizeof(Input));
@@ -2213,6 +2280,8 @@ VulkanInit(
 	VulkanInitVertex();
 }
 
+static long double fps[10000];
+static uintptr_t fps_c = 0;
 
 void
 VulkanRun(
@@ -2222,7 +2291,33 @@ VulkanRun(
 	while(!glfwWindowShouldClose(Window))
 	{
 		glfwPollEvents();
+
+		struct timespec start = {0};
+		clock_gettime(CLOCK_REALTIME, &start);
+		uint64_t start_time = start.tv_nsec + start.tv_sec * 1000000000;
+
 		VulkanDraw();
+
+		struct timespec end = {0};
+		clock_gettime(CLOCK_REALTIME, &end);
+		uint64_t end_time = end.tv_nsec + end.tv_sec * 1000000000;
+
+		fps[fps_c] = (long double) 1000000000.0 / (end_time - start_time);
+		fps_c = (fps_c + 1) % ARRAYLEN(fps);
+
+		if(fps_c == 0)
+		{
+			long double times = 0.0;
+
+			for(uintptr_t i = 0; i < ARRAYLEN(fps); ++i)
+			{
+				times += fps[i];
+			}
+
+			times /= (long double) ARRAYLEN(fps);
+
+			printf("avg fps %.02Lf\n", times);
+		}
 	}
 
 	vkDeviceWaitIdle(vkDevice);
