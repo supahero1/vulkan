@@ -64,10 +64,6 @@ static VkImageView* vkImageViews;
 static uint32_t vkImageCount;
 
 
-static VkViewport vkViewport;
-static VkRect2D vkScissor;
-
-
 static VkCommandPool vkCommandPool;
 static VkCommandBuffer vkCommandBuffer;
 static VkFence vkFence;
@@ -79,6 +75,7 @@ static VkSampler vkSampler;
 
 typedef struct Image
 {
+	uint32_t Layers;
 	VkImage Image;
 	VkImageView View;
 	VkDeviceMemory Memory;
@@ -90,55 +87,51 @@ static Image vkDepthBuffer;
 static Image vkMultisampling;
 
 
-typedef struct VkVertexInput
+typedef struct VkVertexVertexInput
 {
-	vec3 Position;
-	vec2 Texel;
+	vec2 Position;
+	vec2 TexCoord;
 }
-VkVertexInput;
+VkVertexVertexInput;
 
-static const VkVertexInput vkVertexInput[] =
+static const VkVertexVertexInput vkVertexVertexInput[] =
 {
-	{{50.5f, 50.5f, -50.5f}, {0.875f, 0.875f}},
-	{{50.5f, 50.5f, -50.5f}, {0.875f, 0.875f}},
-	{{-50.5f, 50.5f, -50.5f}, {0.8f, 0.875f}},
-    {{50.5f, -50.5f, -50.5f}, {0.875f, 0.8f}},
-	{{-50.5f, -50.5f, -50.5f}, {0.8f, 0.8f}},
-	{{-50.5f, -50.5f, -50.5f}, {0.8f, 0.8f}},
-
-	{{0.5f, 0.5f, -0.5f}, {0.875f, 0.875f}},
-	{{0.5f, 0.5f, -0.5f}, {0.875f, 0.875f}},
-	{{-0.5f, 0.5f, -0.5f}, {0.125f, 0.875f}},
-    {{0.5f, -0.5f, -0.5f}, {0.875f, 0.125f}},
-	{{-0.5f, -0.5f, -0.5f}, {0.125f, 0.125f}},
-	{{-0.5f, -0.5f, -0.5f}, {0.125f, 0.125f}},
-
-	{{0.5f, 0.5f, 0.0f}, {0.875f, 0.875f}},
-	{{0.5f, 0.5f, 0.0f}, {0.875f, 0.875f}},
-	{{-0.5f, 0.5f, 0.0f}, {0.125f, 0.875f}},
-    {{0.5f, -0.5f, 0.0f}, {0.875f, 0.125f}},
-	{{-0.5f, -0.5f, 0.0f}, {0.125f, 0.125f}},
-	{{-0.5f, -0.5f, 0.0f}, {0.125f, 0.125f}},
-
-	{{0.5f, 0.5f, 0.5f}, {0.875f, 0.875f}},
-	{{0.5f, 0.5f, 0.5f}, {0.875f, 0.875f}},
-	{{-0.5f, 0.5f, 0.5f}, {0.125f, 0.875f}},
-    {{0.5f, -0.5f, 0.5f}, {0.875f, 0.125f}},
-	{{-0.5f, -0.5f, 0.5f}, {0.125f, 0.125f}},
-	{{-0.5f, -0.5f, 0.5f}, {0.125f, 0.125f}},
+	{ { -0.5f, -0.5f }, { 0.0f, 0.0f } },
+	{ {  0.5f, -0.5f }, { 1.0f, 0.0f } },
+	{ { -0.5f,  0.5f }, { 0.0f, 1.0f } },
+	{ {  0.5f,  0.5f }, { 1.0f, 1.0f } },
 };
 
-static VkBuffer vkVertexBuffer;
-static VkDeviceMemory vkVertexBufferMemory;
+static VkBuffer vkVertexVertexInputBuffer;
+static VkDeviceMemory vkVertexVertexInputMemory;
 
 
-typedef struct VkVertexUniformInput
+typedef struct VkVertexInstanceInput
 {
-	mat4 Model;
-	mat4 View;
-	mat4 Projection;
+	vec3 Position;
+	vec2 Dimensions;
+	float Rotation;
+	uint32_t TexIndex;
 }
-VkVertexUniformInput;
+VkVertexInstanceInput;
+
+static const VkVertexInstanceInput vkVertexInstanceInput[] =
+{
+	{ { 0.0f, 0.0f, -50.0f }, { 50.0f, 50.0f }, 0, 1 },
+	{ { 0.0f, 0.0f, -1.0f }, { 1.0f, 1.0f }, 0, 0 },
+	{ { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f }, 1, 1 },
+	{ { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f }, 2, 2 },
+};
+
+static VkBuffer vkVertexInstanceInputBuffer;
+static VkDeviceMemory vkVertexInstanceInputMemory;
+
+
+typedef struct VkVertexConstantInput
+{
+	mat4 Transform;
+}
+VkVertexConstantInput;
 
 
 static VkDescriptorSetLayout vkDescriptors;
@@ -1204,7 +1197,7 @@ VulkanCopyToBuffer(
 	VkResult Result = vkMapMemory(vkDevice, vkCopyBufferMemory, 0, VK_WHOLE_SIZE, 0, &Memory);
 	AssertEQ(Result, VK_SUCCESS);
 
-	memcpy(Memory, vkVertexInput, Size);
+	memcpy(Memory, Data, Size);
 	vkUnmapMemory(vkDevice, vkCopyBufferMemory);
 
 	VkBufferCopy Copy = {0};
@@ -1222,15 +1215,19 @@ static void
 VulkanCopyToImage(
 	Image* Image,
 	const void* Data,
-	uint32_t Width,
-	uint32_t Height
+	uint32_t TextureWidth,
+	uint32_t TextureHeight,
+	uint32_t TextureColumns,
+	uint32_t TextureRows
 	)
 {
 	VulkanBeginCommandBuffer();
 
 	VulkanDestroyCopyBuffer();
 
-	VkDeviceSize Size = Width * Height * 4;
+	VkDeviceSize Pass = TextureWidth * 4;
+	VkDeviceSize BigPass = Pass * 7;
+	VkDeviceSize Size = Pass * TextureHeight * TextureColumns * TextureRows;
 
 	VulkanGetStagingBuffer(Size, &vkCopyBuffer, &vkCopyBufferMemory);
 
@@ -1242,18 +1239,51 @@ VulkanCopyToImage(
 	memcpy(Memory, Data, Size);
 	vkUnmapMemory(vkDevice, vkCopyBufferMemory);
 
-	VkBufferImageCopy Copy = {0};
-	Copy.bufferOffset = 0;
-	Copy.bufferRowLength = 0;
-	Copy.bufferImageHeight = 0;
-	Copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	Copy.imageSubresource.mipLevel = 0;
-	Copy.imageSubresource.baseArrayLayer = 0;
-	Copy.imageSubresource.layerCount = 1;
-	Copy.imageOffset = (VkOffset3D){ 0, 0, 0 };
-	Copy.imageExtent = (VkExtent3D){ Width, Height, 1 };
+	uint32_t ImageWidth = TextureWidth * TextureColumns;
+	uint32_t ImageHeight = TextureHeight * TextureRows;
 
-	vkCmdCopyBufferToImage(vkCommandBuffer, vkCopyBuffer, Image->Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Copy);
+	VkBufferImageCopy Copies[Image->Layers];
+
+	uint32_t i = 0;
+	VkBufferImageCopy* Copy = Copies;
+	VkDeviceSize BufferOffset = 0;
+
+	while(1)
+	{
+		*Copy = (VkBufferImageCopy){0};
+		Copy->bufferOffset = BufferOffset;
+		Copy->bufferRowLength = ImageWidth;
+		Copy->bufferImageHeight = ImageHeight;
+		Copy->imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		Copy->imageSubresource.mipLevel = 0;
+		Copy->imageSubresource.baseArrayLayer = i;
+		Copy->imageSubresource.layerCount = 1;
+		Copy->imageOffset.x = 0;
+		Copy->imageOffset.y = 0;
+		Copy->imageOffset.z = 0;
+		Copy->imageExtent.width = TextureWidth;
+		Copy->imageExtent.height = TextureHeight;
+		Copy->imageExtent.depth = 1;
+
+		if(++i == Image->Layers)
+		{
+			break;
+		}
+
+		if(i % TextureColumns == 0)
+		{
+			BufferOffset += BigPass;
+		}
+		else
+		{
+			BufferOffset += Pass;
+		}
+
+		++Copy;
+	}
+
+	vkCmdCopyBufferToImage(vkCommandBuffer, vkCopyBuffer, Image->Image,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, ARRAYLEN(Copies), Copies);
 
 	VulkanEndCommandBuffer();
 }
@@ -1264,6 +1294,7 @@ VulkanCreateImageGeneric(
 	uint32_t Width,
 	uint32_t Height,
 	VkFormat Format,
+	uint32_t Layers,
 	VkImageAspectFlags Aspect,
 	VkSampleCountFlagBits Samples,
 	VkImageUsageFlags Usage,
@@ -1281,7 +1312,7 @@ VulkanCreateImageGeneric(
 	ImageInfo.extent.height = Height;
 	ImageInfo.extent.depth = 1;
 	ImageInfo.mipLevels = 1;
-	ImageInfo.arrayLayers = 1;
+	ImageInfo.arrayLayers = Layers;
 	ImageInfo.samples = Samples;
 	ImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 	ImageInfo.usage = Usage;
@@ -1313,7 +1344,7 @@ VulkanCreateImageGeneric(
 	ViewInfo.pNext = NULL;
 	ViewInfo.flags = 0;
 	ViewInfo.image = Image->Image;
-	ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
 	ViewInfo.format = Format;
 	ViewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
 	ViewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -1323,21 +1354,24 @@ VulkanCreateImageGeneric(
 	ViewInfo.subresourceRange.baseMipLevel = 0;
 	ViewInfo.subresourceRange.levelCount = 1;
 	ViewInfo.subresourceRange.baseArrayLayer = 0;
-	ViewInfo.subresourceRange.layerCount = 1;
+	ViewInfo.subresourceRange.layerCount = Layers;
 
 	Result = vkCreateImageView(vkDevice, &ViewInfo, NULL, &Image->View);
 	AssertEQ(Result, VK_SUCCESS);
+
+	Image->Layers = Layers;
 }
 
 
 static void
 VulkanCreateTextureImage(
-	uint32_t Width,
-	uint32_t Height,
+	uint32_t TextureWidth,
+	uint32_t TextureHeight,
+	uint32_t Layers,
 	Image* Image
 	)
 {
-	VulkanCreateImageGeneric(Width, Height, VK_FORMAT_B8G8R8A8_SRGB,
+	VulkanCreateImageGeneric(TextureHeight, TextureHeight, VK_FORMAT_B8G8R8A8_SRGB, Layers,
 		VK_IMAGE_ASPECT_COLOR_BIT, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 		VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Image);
 }
@@ -1348,7 +1382,7 @@ VulkanCreateDepthImage(
 	Image* Image
 	)
 {
-	VulkanCreateImageGeneric(vkExtent.width, vkExtent.height, VK_FORMAT_D32_SFLOAT,
+	VulkanCreateImageGeneric(vkExtent.width, vkExtent.height, VK_FORMAT_D32_SFLOAT, 1,
 		VK_IMAGE_ASPECT_DEPTH_BIT, vkSamples, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Image);
 }
@@ -1359,7 +1393,7 @@ VulkanCreateMultisampledImage(
 	Image* Image
 	)
 {
-	VulkanCreateImageGeneric(vkExtent.width, vkExtent.height, VK_FORMAT_B8G8R8A8_SRGB,
+	VulkanCreateImageGeneric(vkExtent.width, vkExtent.height, VK_FORMAT_B8G8R8A8_SRGB, 1,
 		VK_IMAGE_ASPECT_COLOR_BIT, vkSamples, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
 		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Image);
 }
@@ -1424,7 +1458,7 @@ VulkanTransitionImageLayout(
 	Barrier.subresourceRange.baseMipLevel = 0;
 	Barrier.subresourceRange.levelCount = 1;
 	Barrier.subresourceRange.baseArrayLayer = 0;
-	Barrier.subresourceRange.layerCount = 1;
+	Barrier.subresourceRange.layerCount = Image->Layers;
 
 	vkCmdPipelineBarrier(vkCommandBuffer, SourceStage, DestinationStage, 0, 0, NULL, 0, NULL, 1, &Barrier);
 
@@ -1438,18 +1472,35 @@ VulkanCreateTexture(
 	Image* Image
 	)
 {
-	int TextureWidth;
-	int TextureHeight;
-	int TextureChannels;
+	int ImageWidth;
+	int ImageHeight;
+	int ImageChannels;
 
-	stbi_uc* Pixels = stbi_load(Path, &TextureWidth, &TextureHeight, &TextureChannels, STBI_rgb_alpha);
+	stbi_uc* Pixels = stbi_load(Path, &ImageWidth, &ImageHeight, &ImageChannels, STBI_rgb_alpha);
 	AssertNEQ(Pixels, NULL);
 
-	VulkanCreateTextureImage(TextureWidth, TextureHeight, Image);
+	uint32_t TextureWidth;
+	uint32_t TextureHeight;
+	uint32_t TextureLayers;
+
+	const char* File = Path + strlen(Path);
+
+	while(File != Path && *(File - 1) != '/')
+	{
+		--File;
+	}
+
+	int Parsed = sscanf(File, "%ux%ux%u", &TextureWidth, &TextureHeight, &TextureLayers);
+	AssertEQ(Parsed, 3);
+	AssertEQ(ImageWidth % TextureWidth, 0);
+	AssertEQ(ImageHeight % TextureHeight, 0);
+
+	VulkanCreateTextureImage(TextureWidth, TextureHeight, TextureLayers, Image);
 
 	VulkanTransitionImageLayout(Image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-	VulkanCopyToImage(Image, Pixels, TextureWidth, TextureHeight);
+	VulkanCopyToImage(Image, Pixels, TextureWidth, TextureHeight,
+		ImageWidth / TextureWidth, ImageHeight / TextureHeight);
 
 	stbi_image_free(Pixels);
 
@@ -1583,31 +1634,11 @@ VulkanDestroyFramebuffers(
 
 
 static void
-VulkanGetConsts(
-	void
-	)
-{
-	vkViewport.x = 0.0f;
-	vkViewport.y = 0.0f;
-	vkViewport.width = vkExtent.width;
-	vkViewport.height = vkExtent.height;
-	vkViewport.minDepth = 0.0f;
-	vkViewport.maxDepth = 1.0f;
-
-	vkScissor.offset.x = 0;
-	vkScissor.offset.y = 0;
-	vkScissor.extent = vkExtent;
-}
-
-
-static void
 VulkanInitPipeline(
 	void
 	)
 {
-	VulkanGetConsts();
-
-	VulkanCreateTexture("textures/texture6.png", &vkTexture);
+	VulkanCreateTexture("textures/4x4x3.png", &vkTexture);
 
 	VkAttachmentReference ColorAttachmentRef = {0};
 	ColorAttachmentRef.attachment = 0;
@@ -1711,42 +1742,54 @@ VulkanInitPipeline(
 	Stages[1].pName = "main";
 	Stages[1].pSpecializationInfo = NULL;
 
-	VkDynamicState DynamicStates[] =
-	{
-		VK_DYNAMIC_STATE_VIEWPORT,
-		VK_DYNAMIC_STATE_SCISSOR
-	};
+	VkVertexInputBindingDescription VertexBindings[2] = {0};
 
-	VkPipelineDynamicStateCreateInfo DynamicState = {0};
-	DynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-	DynamicState.pNext = NULL;
-	DynamicState.flags = 0;
-	DynamicState.dynamicStateCount = ARRAYLEN(DynamicStates);
-	DynamicState.pDynamicStates = DynamicStates;
+	VertexBindings[0].binding = 0;
+	VertexBindings[0].stride = sizeof(VkVertexVertexInput);
+	VertexBindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-	VkVertexInputBindingDescription VertexBinding = {0};
-	VertexBinding.binding = 0;
-	VertexBinding.stride = sizeof(VkVertexInput);
-	VertexBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	VertexBindings[1].binding = 1;
+	VertexBindings[1].stride = sizeof(VkVertexInstanceInput);
+	VertexBindings[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
 
-	VkVertexInputAttributeDescription Attributes[2] = {0};
+	VkVertexInputAttributeDescription Attributes[6] = {0};
 
 	Attributes[0].location = 0;
 	Attributes[0].binding = 0;
 	Attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-	Attributes[0].offset = offsetof(VkVertexInput, Position);
+	Attributes[0].offset = offsetof(VkVertexVertexInput, Position);
 
 	Attributes[1].location = 1;
 	Attributes[1].binding = 0;
 	Attributes[1].format = VK_FORMAT_R32G32_SFLOAT;
-	Attributes[1].offset = offsetof(VkVertexInput, Texel);
+	Attributes[1].offset = offsetof(VkVertexVertexInput, TexCoord);
+
+	Attributes[2].location = 2;
+	Attributes[2].binding = 1;
+	Attributes[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+	Attributes[2].offset = offsetof(VkVertexInstanceInput, Position);
+
+	Attributes[3].location = 3;
+	Attributes[3].binding = 1;
+	Attributes[3].format = VK_FORMAT_R32G32_SFLOAT;
+	Attributes[3].offset = offsetof(VkVertexInstanceInput, Dimensions);
+
+	Attributes[4].location = 4;
+	Attributes[4].binding = 1;
+	Attributes[4].format = VK_FORMAT_R32_SFLOAT;
+	Attributes[4].offset = offsetof(VkVertexInstanceInput, Rotation);
+
+	Attributes[5].location = 5;
+	Attributes[5].binding = 1;
+	Attributes[5].format = VK_FORMAT_R32_UINT;
+	Attributes[5].offset = offsetof(VkVertexInstanceInput, TexIndex);
 
 	VkPipelineVertexInputStateCreateInfo VertexInput = {0};
 	VertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	VertexInput.pNext = NULL;
 	VertexInput.flags = 0;
-	VertexInput.vertexBindingDescriptionCount = 1;
-	VertexInput.pVertexBindingDescriptions = &VertexBinding;
+	VertexInput.vertexBindingDescriptionCount = ARRAYLEN(VertexBindings);
+	VertexInput.pVertexBindingDescriptions = VertexBindings;
 	VertexInput.vertexAttributeDescriptionCount = ARRAYLEN(Attributes);
 	VertexInput.pVertexAttributeDescriptions = Attributes;
 
@@ -1757,14 +1800,27 @@ VulkanInitPipeline(
 	InputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 	InputAssembly.primitiveRestartEnable = VK_FALSE;
 
+	VkViewport Viewport = {0};
+	Viewport.x = 0.0f;
+	Viewport.y = 0.0f;
+	Viewport.width = vkExtent.width;
+	Viewport.height = vkExtent.height;
+	Viewport.minDepth = 0.0f;
+	Viewport.maxDepth = 1.0f;
+
+	VkRect2D Scissor = {0};
+	Scissor.offset.x = 0;
+	Scissor.offset.y = 0;
+	Scissor.extent = vkExtent;
+
 	VkPipelineViewportStateCreateInfo ViewportState = {0};
 	ViewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 	ViewportState.pNext = NULL;
 	ViewportState.flags = 0;
 	ViewportState.viewportCount = 1;
-	ViewportState.pViewports = &vkViewport; // ignored cuz dynamic
+	ViewportState.pViewports = &Viewport;
 	ViewportState.scissorCount = 1;
-	ViewportState.pScissors = &vkScissor; // ignored cuz dynamic
+	ViewportState.pScissors = &Scissor;
 
 	VkPipelineRasterizationStateCreateInfo Rasterizer = {0};
 	Rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -1773,7 +1829,7 @@ VulkanInitPipeline(
 	Rasterizer.depthClampEnable = VK_FALSE;
 	Rasterizer.rasterizerDiscardEnable = VK_FALSE;
 	Rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-	Rasterizer.cullMode = VK_CULL_MODE_NONE; //VK_CULL_MODE_BACK_BIT;
+	Rasterizer.cullMode = VK_CULL_MODE_NONE; // VK_CULL_MODE_BACK_BIT;
 	Rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	Rasterizer.depthBiasEnable = VK_FALSE;
 	Rasterizer.depthBiasConstantFactor = 0.0f;
@@ -1882,7 +1938,7 @@ VulkanInitPipeline(
 	PipelineInfo.pMultisampleState = &Multisampling;
 	PipelineInfo.pDepthStencilState = &DepthStencil;
 	PipelineInfo.pColorBlendState = &Blending;
-	PipelineInfo.pDynamicState = &DynamicState;
+	PipelineInfo.pDynamicState = NULL;
 	PipelineInfo.layout = vkPipelineLayout;
 	PipelineInfo.renderPass = vkRenderPass;
 	PipelineInfo.subpass = 0;
@@ -2078,9 +2134,14 @@ VulkanInitVertex(
 	void
 	)
 {
-	VulkanGetFinalBuffer(sizeof(vkVertexInput), &vkVertexBuffer, &vkVertexBufferMemory);
+	VulkanGetFinalBuffer(sizeof(vkVertexVertexInput), &vkVertexVertexInputBuffer, &vkVertexVertexInputMemory);
 
-	VulkanCopyToBuffer(vkVertexBuffer, vkVertexInput, sizeof(vkVertexInput));
+	VulkanCopyToBuffer(vkVertexVertexInputBuffer, vkVertexVertexInput, sizeof(vkVertexVertexInput));
+
+
+	VulkanGetFinalBuffer(sizeof(vkVertexInstanceInput), &vkVertexInstanceInputBuffer, &vkVertexInstanceInputMemory);
+
+	VulkanCopyToBuffer(vkVertexInstanceInputBuffer, vkVertexInstanceInput, sizeof(vkVertexInstanceInput));
 }
 
 
@@ -2089,8 +2150,11 @@ VulkanDestroyVertex(
 	void
 	)
 {
-	vkFreeMemory(vkDevice, vkVertexBufferMemory, NULL);
-	vkDestroyBuffer(vkDevice, vkVertexBuffer, NULL);
+	vkFreeMemory(vkDevice, vkVertexInstanceInputMemory, NULL);
+	vkDestroyBuffer(vkDevice, vkVertexInstanceInputBuffer, NULL);
+
+	vkFreeMemory(vkDevice, vkVertexVertexInputMemory, NULL);
+	vkDestroyBuffer(vkDevice, vkVertexVertexInputBuffer, NULL);
 }
 
 
@@ -2131,40 +2195,18 @@ VulkanRecordCommands(
 
 	vkCmdBindPipeline(vkFrame->CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline);
 
-	vkCmdSetViewport(vkFrame->CommandBuffer, 0, 1, &vkViewport);
-	vkCmdSetScissor(vkFrame->CommandBuffer, 0, 1, &vkScissor);
+	vkCmdBindVertexBuffers(vkFrame->CommandBuffer, 0, 1, &vkVertexVertexInputBuffer, &Offset);
+	vkCmdBindVertexBuffers(vkFrame->CommandBuffer, 1, 1, &vkVertexInstanceInputBuffer, &Offset);
 
-	vkCmdBindVertexBuffers(vkFrame->CommandBuffer, 0, 1, &vkVertexBuffer, &Offset);
 	vkCmdBindDescriptorSets(vkFrame->CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 		vkPipelineLayout, 0, 1, &vkFrame->DescriptorSet, 0, NULL);
 
-	vkCmdDraw(vkFrame->CommandBuffer, ARRAYLEN(vkVertexInput), 1, 0, 0);
+	vkCmdDraw(vkFrame->CommandBuffer, ARRAYLEN(vkVertexVertexInput), ARRAYLEN(vkVertexInstanceInput), 0, 0);
 
 	vkCmdEndRenderPass(vkFrame->CommandBuffer);
 
 	Result = vkEndCommandBuffer(vkFrame->CommandBuffer);
 	AssertEQ(Result, VK_SUCCESS);
-}
-
-
-static void
-VulkanRecreateSwapchain(
-	void
-	)
-{
-	puts("recreating swapchain");
-
-	vkExtent = VulkanGetExtent();
-	printf("w %u h %u\n", vkExtent.width, vkExtent.height);
-	VulkanGetConsts();
-
-	vkDeviceWaitIdle(vkDevice);
-
-	VulkanDestroyFramebuffers();
-	VulkanDestroySwapchain();
-
-	VulkanInitSwapchain();
-	VulkanInitFramebuffers();
 }
 
 
@@ -2211,7 +2253,8 @@ VulkanDraw(
 
 	if(Result == VK_ERROR_OUT_OF_DATE_KHR)
 	{
-		VulkanRecreateSwapchain();
+		vkExtent = VulkanGetExtent();
+
 		return;
 	}
 
@@ -2259,7 +2302,7 @@ VulkanDraw(
 
 	if(Result == VK_ERROR_OUT_OF_DATE_KHR || Result == VK_SUBOPTIMAL_KHR)
 	{
-		VulkanRecreateSwapchain();
+		vkExtent = VulkanGetExtent();
 	}
 
 	if(++vkFrame == vkFrameEnd)
@@ -2356,6 +2399,4 @@ VulkanFree(
 }
 
 // 1. secondary command buffer for prerecorded draw commands
-// 2. swapchain recreation occurs on windows, need to add depth buffer and multisampling recreation
-// 3. only draw textures, no custom positions
 // 4. push constants and merge the 3 matrices into 1
