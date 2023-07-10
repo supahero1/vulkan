@@ -163,10 +163,6 @@ typedef struct VkFrame
 	VkSemaphore Semaphores[kSEMAPHORE];
 	VkFence Fences[kFENCE];
 
-	VkBuffer UniformBuffer;
-	VkDeviceMemory UniformBufferMemory;
-	void* UniformData;
-
 	VkDescriptorSet DescriptorSet;
 }
 VkFrame;
@@ -1887,19 +1883,13 @@ VulkanInitPipeline(
 	Blending.blendConstants[2] = 0.0f;
 	Blending.blendConstants[3] = 0.0f;
 
-	VkDescriptorSetLayoutBinding Bindings[2] = {0};
+	VkDescriptorSetLayoutBinding Bindings[1] = {0};
 
 	Bindings[0].binding = 0;
-	Bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	Bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	Bindings[0].descriptorCount = 1;
-	Bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	Bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 	Bindings[0].pImmutableSamplers = NULL;
-
-	Bindings[1].binding = 1;
-	Bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	Bindings[1].descriptorCount = 1;
-	Bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-	Bindings[1].pImmutableSamplers = NULL;
 
 	VkDescriptorSetLayoutCreateInfo Descriptors = {0};
 	Descriptors.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1911,14 +1901,20 @@ VulkanInitPipeline(
 	Result = vkCreateDescriptorSetLayout(vkDevice, &Descriptors, NULL, &vkDescriptors);
 	AssertEQ(Result, VK_SUCCESS);
 
+	VkPushConstantRange PushConstants[1] = {0};
+
+	PushConstants[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	PushConstants[0].offset = 0;
+	PushConstants[0].size = sizeof(VkVertexConstantInput);
+
 	VkPipelineLayoutCreateInfo CreateInfo = {0};
 	CreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	CreateInfo.pNext = NULL;
 	CreateInfo.flags = 0;
 	CreateInfo.setLayoutCount = 1;
 	CreateInfo.pSetLayouts = &vkDescriptors;
-	CreateInfo.pushConstantRangeCount = 0;
-	CreateInfo.pPushConstantRanges = NULL;
+	CreateInfo.pushConstantRangeCount = ARRAYLEN(PushConstants);
+	CreateInfo.pPushConstantRanges = PushConstants;
 
 	Result = vkCreatePipelineLayout(vkDevice, &CreateInfo, NULL, &vkPipelineLayout);
 	AssertEQ(Result, VK_SUCCESS);
@@ -2035,14 +2031,6 @@ VulkanInitObjects(
 		while(++Fence != FenceEnd);
 
 
-		VulkanGetBuffer(sizeof(VkVertexUniformInput), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			&Frame->UniformBuffer, &Frame->UniformBufferMemory);
-
-		VkResult Result = vkMapMemory(vkDevice, Frame->UniformBufferMemory, 0, VK_WHOLE_SIZE, 0, &Frame->UniformData);
-		AssertEQ(Result, VK_SUCCESS);
-
-
 		VkDescriptorSetAllocateInfo AllocInfo = {0};
 		AllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		AllocInfo.pNext = NULL;
@@ -2050,21 +2038,16 @@ VulkanInitObjects(
 		AllocInfo.descriptorSetCount = 1;
 		AllocInfo.pSetLayouts = &vkDescriptors;
 
-		Result = vkAllocateDescriptorSets(vkDevice, &AllocInfo, &Frame->DescriptorSet);
+		VkResult Result = vkAllocateDescriptorSets(vkDevice, &AllocInfo, &Frame->DescriptorSet);
 		AssertEQ(Result, VK_SUCCESS);
 
-
-		VkDescriptorBufferInfo BufferInfo = {0};
-		BufferInfo.buffer = Frame->UniformBuffer;
-		BufferInfo.offset = 0;
-		BufferInfo.range = VK_WHOLE_SIZE;
 
 		VkDescriptorImageInfo ImageInfo = {0};
 		ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		ImageInfo.imageView = vkTexture.View;
 		ImageInfo.sampler = vkSampler;
 
-		VkWriteDescriptorSet DescriptorWrites[2] = {0};
+		VkWriteDescriptorSet DescriptorWrites[1] = {0};
 
 		DescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		DescriptorWrites[0].pNext = NULL;
@@ -2072,21 +2055,10 @@ VulkanInitObjects(
 		DescriptorWrites[0].dstBinding = 0;
 		DescriptorWrites[0].dstArrayElement = 0;
 		DescriptorWrites[0].descriptorCount = 1;
-		DescriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		DescriptorWrites[0].pImageInfo = NULL;
-		DescriptorWrites[0].pBufferInfo = &BufferInfo;
+		DescriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		DescriptorWrites[0].pImageInfo = &ImageInfo;
+		DescriptorWrites[0].pBufferInfo = NULL;
 		DescriptorWrites[0].pTexelBufferView = NULL;
-
-		DescriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		DescriptorWrites[1].pNext = NULL;
-		DescriptorWrites[1].dstSet = Frame->DescriptorSet;
-		DescriptorWrites[1].dstBinding = 1;
-		DescriptorWrites[1].dstArrayElement = 0;
-		DescriptorWrites[1].descriptorCount = 1;
-		DescriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		DescriptorWrites[1].pImageInfo = &ImageInfo;
-		DescriptorWrites[1].pBufferInfo = NULL;
-		DescriptorWrites[1].pTexelBufferView = NULL;
 
 		vkUpdateDescriptorSets(vkDevice, ARRAYLEN(DescriptorWrites), DescriptorWrites, 0, NULL);
 	}
@@ -2103,9 +2075,6 @@ VulkanDestroyObjects(
 
 	do
 	{
-		vkFreeMemory(vkDevice, Frame->UniformBufferMemory, NULL);
-		vkDestroyBuffer(vkDevice, Frame->UniformBuffer, NULL);
-
 		VkFence* Fence = Frame->Fences;
 		VkFence* FenceEnd = Frame->Fences + ARRAYLEN(Frame->Fences);
 
@@ -2159,6 +2128,49 @@ VulkanDestroyVertex(
 
 
 static void
+VulkanUpdateConstants(
+	void
+	)
+{
+	static float Rotation = 0;
+	Rotation += 0.0001;
+
+	float AspectRatio = (float) vkExtent.width / vkExtent.height;
+	vec3 RotationAxis = { sinf(Rotation), sinf(Rotation) * cosf(Rotation), cosf(Rotation) };
+	vec3 Eye = { 0.0f, 1.0f, 1.0f };
+	vec3 Center = { 0.0f, 0.0f, 0.0f };
+	vec3 Up = { 0.0f, 0.0f, 1.0f };
+
+	mat4 Model;
+	glm_mat4_identity(Model);
+	glm_rotate(Model, Rotation, RotationAxis);
+
+	mat4 View;
+	glm_mat4_identity(View);
+	glm_lookat(Eye, Center, Up, View);
+
+	mat4 Projection;
+	glm_mat4_identity(Projection);
+	glm_perspective(glm_rad(45 + sinf(Rotation) * 30), AspectRatio, 0.1f, 100.0f, Projection);
+	//glm_ortho_default((float) vkExtent.width / vkExtent.height, Input.Projection);
+	Projection[1][1] *= -1;
+
+	mat4* Matrices[] =
+	{
+		&Projection,
+		&View,
+		&Model
+	};
+
+	VkVertexConstantInput Constants = {0};
+	glm_mat4_mulN(Matrices, ARRAYLEN(Matrices), Constants.Transform);
+
+	vkCmdPushConstants(vkFrame->CommandBuffer, vkPipelineLayout,
+		VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Constants), &Constants);
+}
+
+
+static void
 VulkanRecordCommands(
 	uint32_t ImageIndex
 	)
@@ -2201,41 +2213,14 @@ VulkanRecordCommands(
 	vkCmdBindDescriptorSets(vkFrame->CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 		vkPipelineLayout, 0, 1, &vkFrame->DescriptorSet, 0, NULL);
 
+	VulkanUpdateConstants();
+
 	vkCmdDraw(vkFrame->CommandBuffer, ARRAYLEN(vkVertexVertexInput), ARRAYLEN(vkVertexInstanceInput), 0, 0);
 
 	vkCmdEndRenderPass(vkFrame->CommandBuffer);
 
 	Result = vkEndCommandBuffer(vkFrame->CommandBuffer);
 	AssertEQ(Result, VK_SUCCESS);
-}
-
-
-static void
-VulkanUpdateUniforms(
-	void
-	)
-{
-	static float Rotation = 0;
-	Rotation += 0.0001;
-
-	vec3 RotationAxis = { sinf(Rotation), sinf(Rotation) * cosf(Rotation), cosf(Rotation) };
-	vec3 Eye = { 0.0f, 1.0f, 1.0f };
-	vec3 Center = { 0.0f, 0.0f, 0.0f };
-	vec3 Up = { 0.0f, 0.0f, 1.0f };
-
-
-	VkVertexUniformInput Input = {0};
-	glm_mat4_identity(Input.Model);
-	glm_mat4_identity(Input.View);
-	glm_mat4_identity(Input.Projection);
-
-	glm_rotate(Input.Model, Rotation, RotationAxis);
-	glm_lookat(Eye, Center, Up, Input.View);
-	glm_perspective(glm_rad(45 + sinf(Rotation) * 30), (float) vkExtent.width / vkExtent.height, 0.1f, 100.0f, Input.Projection);
-	//glm_ortho_default((float) vkExtent.width / vkExtent.height, Input.Projection);
-	Input.Projection[1][1] *= -1;
-
-	memcpy(vkFrame->UniformData, &Input, sizeof(Input));
 }
 
 
@@ -2266,8 +2251,6 @@ VulkanDraw(
 	AssertEQ(Result, VK_SUCCESS);
 
 	VulkanRecordCommands(ImageIndex);
-
-	VulkanUpdateUniforms();
 
 	VkPipelineStageFlags WaitStages[] =
 	{
@@ -2398,5 +2381,4 @@ VulkanFree(
 	VulkanDestroyGLFW();
 }
 
-// 1. secondary command buffer for prerecorded draw commands
-// 4. push constants and merge the 3 matrices into 1
+// 1. secondary command buffer for prerecorded draw commands OR indirect drawing

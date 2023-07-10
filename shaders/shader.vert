@@ -1,8 +1,8 @@
 #version 450
 
-layout(binding = 0) uniform UniformBufferObject {
+layout(push_constant) uniform Constants {
     mat4 transform;
-} ubo;
+} consts;
 
 layout(location = 0) in vec2 inVertexPosition;
 layout(location = 1) in vec2 inTexCoords;
@@ -16,7 +16,7 @@ layout(location = 0) out vec2 outTexCoord;
 layout(location = 1) flat out uint outTexIdx;
 
 void main() {
-    gl_Position = ubo.proj * ubo.view * ubo.model *
+    gl_Position = consts.transform *
 		vec4(
 			vec2(
 				inVertexPosition.x * inDimensions.x + inPosition.x,
