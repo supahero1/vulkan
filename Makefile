@@ -18,7 +18,7 @@ ifneq ($(RELEASE),1)
 CFLAGS := -O0 -g3 -ggdb $(CFLAGS)
 endif
 
-COMP := $(CC) src/* -o bin/exe
+COMP := $(CC) $(shell find src -type f) -o bin/exe
 
 
 

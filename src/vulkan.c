@@ -5,9 +5,10 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define CGLM_FORCE_RADIANS
+#define CGLM_FORCE_LEFT_HANDED
+#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
+#define CGLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <cglm/cglm.h>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -51,7 +52,6 @@ static VkQueue vkQueue;
 static VkDevice vkDevice;
 static VkExtent2D vkExtent;
 static VkSampleCountFlagBits vkSamples;
-static VkBool32 VkMultisamplingEnabled;
 static VkPhysicalDeviceLimits vkLimits;
 static uint32_t vkMinImageCount;
 static VkSurfaceTransformFlagBitsKHR vkTransform;
@@ -117,10 +117,10 @@ VkVertexInstanceInput;
 
 static const VkVertexInstanceInput vkVertexInstanceInput[] =
 {
-	{ { 0.0f, 0.0f, -50.0f }, { 50.0f, 50.0f }, 0, 1 },
-	{ { 0.0f, 0.0f, -1.0f }, { 1.0f, 1.0f }, 0, 0 },
-	{ { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f }, 1, 1 },
-	{ { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f }, 2, 2 },
+	{ { 0.0f, 0.0f, -50.0f }, { 50.0f, 50.0f }, 0, 0 },
+	{ { 0.0f, 0.0f, -1.0f }, { 1.0f, 1.0f }, 0, 1 },
+	{ { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f }, 1, 2 },
+	{ { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f }, 2, 3 },
 };
 
 static VkBuffer vkVertexInstanceInputBuffer;
@@ -611,7 +611,7 @@ VulkanGetDeviceProperties(
 	}
 	else
 	{
-		DeviceScore->Samples = VK_SAMPLE_COUNT_1_BIT;
+		AssertEQ(0, 1);
 	}
 
 	DeviceScore->Score += DeviceScore->Samples * 16;
@@ -699,7 +699,6 @@ VulkanInitDevice(
 	vkQueueID = BestDeviceScore.QueueID;
 	vkExtent = BestDeviceScore.Extent;
 	vkSamples = BestDeviceScore.Samples;
-	VkMultisamplingEnabled = vkSamples != VK_SAMPLE_COUNT_1_BIT;
 	vkLimits = BestDeviceScore.Limits;
 
 
@@ -1536,11 +1535,6 @@ VulkanInitMultisampling(
 	void
 	)
 {
-	if(!VkMultisamplingEnabled)
-	{
-		return;
-	}
-
 	VulkanCreateMultisampledImage(&vkMultisampling);
 }
 
@@ -1550,11 +1544,6 @@ VulkanDestroyMultisampling(
 	void
 	)
 {
-	if(!VkMultisamplingEnabled)
-	{
-		return;
-	}
-
 	VulkanDestroyImage(&vkMultisampling);
 }
 
@@ -1576,12 +1565,6 @@ VulkanInitFramebuffers(
 	{
 		VkImageView Attachments[] =
 		{
-			*ImageView,
-			vkDepthBuffer.View
-		};
-
-		VkImageView MultisamplingAttachments[] =
-		{
 			vkMultisampling.View,
 			vkDepthBuffer.View,
 			*ImageView
@@ -1592,8 +1575,8 @@ VulkanInitFramebuffers(
 		CreateInfo.pNext = NULL;
 		CreateInfo.flags = 0;
 		CreateInfo.renderPass = vkRenderPass;
-		CreateInfo.attachmentCount = VkMultisamplingEnabled ? ARRAYLEN(MultisamplingAttachments) : ARRAYLEN(Attachments);
-		CreateInfo.pAttachments = VkMultisamplingEnabled ? MultisamplingAttachments : Attachments;
+		CreateInfo.attachmentCount = ARRAYLEN(Attachments);
+		CreateInfo.pAttachments = Attachments;
 		CreateInfo.width = vkExtent.width;
 		CreateInfo.height = vkExtent.height;
 		CreateInfo.layers = 1;
@@ -1634,7 +1617,7 @@ VulkanInitPipeline(
 	void
 	)
 {
-	VulkanCreateTexture("textures/4x4x3.png", &vkTexture);
+	VulkanCreateTexture("textures/4x4x4.png", &vkTexture);
 
 	VkAttachmentReference ColorAttachmentRef = {0};
 	ColorAttachmentRef.attachment = 0;
@@ -1655,7 +1638,7 @@ VulkanInitPipeline(
 	Subpass.pInputAttachments = NULL;
 	Subpass.colorAttachmentCount = 1;
 	Subpass.pColorAttachments = &ColorAttachmentRef;
-	Subpass.pResolveAttachments = VkMultisamplingEnabled ? &MultisamplingRef : NULL;
+	Subpass.pResolveAttachments = &MultisamplingRef;
 	Subpass.pDepthStencilAttachment = &DepthAttachmentRef;
 	Subpass.preserveAttachmentCount = 0;
 	Subpass.pPreserveAttachments = NULL;
@@ -1679,8 +1662,7 @@ VulkanInitPipeline(
 	Attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	Attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	Attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	Attachments[0].finalLayout =
-		VkMultisamplingEnabled ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	Attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 	Attachments[1].flags = 0;
 	Attachments[1].format = VK_FORMAT_D32_SFLOAT;
@@ -1706,7 +1688,7 @@ VulkanInitPipeline(
 	RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 	RenderPassInfo.pNext = NULL;
 	RenderPassInfo.flags = 0;
-	RenderPassInfo.attachmentCount = ARRAYLEN(Attachments) - !VkMultisamplingEnabled;
+	RenderPassInfo.attachmentCount = ARRAYLEN(Attachments);
 	RenderPassInfo.pAttachments = Attachments;
 	RenderPassInfo.subpassCount = 1;
 	RenderPassInfo.pSubpasses = &Subpass;
@@ -1841,7 +1823,7 @@ VulkanInitPipeline(
 	Multisampling.sampleShadingEnable = VK_TRUE;
 	Multisampling.minSampleShading = 1.0f;
 	Multisampling.pSampleMask = NULL;
-	Multisampling.alphaToCoverageEnable = VK_FALSE;
+	Multisampling.alphaToCoverageEnable = VK_TRUE;
 	Multisampling.alphaToOneEnable = VK_FALSE;
 
 	VkPipelineDepthStencilStateCreateInfo DepthStencil = {0};
@@ -1850,7 +1832,7 @@ VulkanInitPipeline(
 	DepthStencil.flags = 0;
 	DepthStencil.depthTestEnable = VK_TRUE;
 	DepthStencil.depthWriteEnable = VK_TRUE;
-	DepthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+	DepthStencil.depthCompareOp = VK_COMPARE_OP_GREATER;
 	DepthStencil.depthBoundsTestEnable = VK_FALSE;
 	DepthStencil.stencilTestEnable = VK_FALSE;
 	DepthStencil.front = (VkStencilOpState){0};
@@ -1867,8 +1849,7 @@ VulkanInitPipeline(
 	BlendingAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 	BlendingAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
 	BlendingAttachment.colorWriteMask =
-		VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-		VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
 	VkPipelineColorBlendStateCreateInfo Blending = {0};
 	Blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -2136,8 +2117,8 @@ VulkanUpdateConstants(
 	Rotation += 0.0001;
 
 	float AspectRatio = (float) vkExtent.width / vkExtent.height;
-	vec3 RotationAxis = { sinf(Rotation), sinf(Rotation) * cosf(Rotation), cosf(Rotation) };
-	vec3 Eye = { 0.0f, 1.0f, 1.0f };
+	vec3 RotationAxis = { 0.0f, 1.0f, 0.0f };
+	vec3 Eye = { 0.0f, 0.001f, 3.0f };
 	vec3 Center = { 0.0f, 0.0f, 0.0f };
 	vec3 Up = { 0.0f, 0.0f, 1.0f };
 
@@ -2151,9 +2132,8 @@ VulkanUpdateConstants(
 
 	mat4 Projection;
 	glm_mat4_identity(Projection);
-	glm_perspective(glm_rad(45 + sinf(Rotation) * 30), AspectRatio, 0.1f, 100.0f, Projection);
+	glm_perspective(glm_rad(45), AspectRatio, 1000.0f, 0.01f, Projection);
 	//glm_ortho_default((float) vkExtent.width / vkExtent.height, Input.Projection);
-	Projection[1][1] *= -1;
 
 	mat4* Matrices[] =
 	{
@@ -2189,7 +2169,7 @@ VulkanRecordCommands(
 	VkClearValue ClearValues[2] = {0};
 
 	ClearValues[0].color = (VkClearColorValue){{ 0.0f, 0.0f, 0.0f, 0.0f }};
-	ClearValues[1].depthStencil = (VkClearDepthStencilValue){ 1.0f, 0 };
+	ClearValues[1].depthStencil = (VkClearDepthStencilValue){ 0.0f, 0 };
 
 
 	VkRenderPassBeginInfo RenderPassInfo = {0};
@@ -2304,8 +2284,8 @@ VulkanInit(
 	VulkanInitInstance();
 	VulkanInitSurface();
 	VulkanInitDevice();
-	VulkanInitSwapchain();
 	VulkanInitSampler();
+	VulkanInitSwapchain();
 	VulkanInitDepthBuffer();
 	VulkanInitMultisampling();
 	VulkanInitFrames();
@@ -2373,12 +2353,12 @@ VulkanFree(
 	VulkanDestroyFrames();
 	VulkanDestroyDepthBuffer();
 	VulkanDestroyMultisampling();
-	VulkanDestroySampler();
 	VulkanDestroySwapchain();
+	VulkanDestroySampler();
 	VulkanDestroyDevice();
 	VulkanDestroySurface();
 	VulkanDestroyInstance();
 	VulkanDestroyGLFW();
 }
 
-// 1. secondary command buffer for prerecorded draw commands OR indirect drawing
+// 2. bring back swapchain lule cuz wthout it windows is broken af af af
